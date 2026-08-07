@@ -1,4 +1,4 @@
-import { ArrowLeft, BadgeCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Languages, MapPin, MessageCircle, ShieldCheck, Star, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Languages, MapPin, MessageCircle, Phone, ShieldCheck, Star, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured, type Companion, type NewBooking } from '@/lib/supabase';
 import { navigate } from '@/lib/router';
@@ -70,7 +70,9 @@ useEffect(() => {
     );
   }
 
-  const gallery = [companion.image_url, ...companion.gallery].filter(Boolean) as string[];
+  const gallery = ([companion.image_url, ...companion.gallery].filter(Boolean) as string[]).length > 0
+    ? ([companion.image_url, ...companion.gallery].filter(Boolean) as string[])
+    : ['https://images.pexels.com/photos/1476356/pexels-photo-1476356.jpeg?auto=compress&cs=tinysrgb&w=800'];
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-5 pb-20 pt-28 lg:px-8">
@@ -149,6 +151,25 @@ useEffect(() => {
             </button>
           </div>
 
+          {companion.phone && (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <a
+                href={`tel:${companion.phone.replace(/[^+\d]/g, '')}`}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-ocean-400/30 bg-ocean-500/10 px-4 py-3.5 text-sm font-bold text-ocean-200 transition hover:bg-ocean-500/20"
+              >
+                <Phone size={16} /> Call {companion.name}
+              </a>
+              <a
+                href={`https://wa.me/${(companion.phone || '').replace(/[^+\d]/g, '').replace(/^\+/, '')}?text=${encodeURIComponent(`Hello ${companion.name}! I found you on Diani Companion and would love to arrange a meet-up.`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-500"
+              >
+                <MessageCircle size={16} /> WhatsApp
+              </a>
+            </div>
+          )}
+
           <div className="mt-5 flex items-start gap-3 rounded-xl border border-white/8 bg-white/[0.02] p-4 text-sm text-white/50">
             <ShieldCheck size={18} className="mt-0.5 shrink-0 text-ocean-300" />
             Every booking is reviewed before confirmation. Be respectful, agree on expectations upfront, and enjoy your Diani day.
@@ -197,6 +218,13 @@ function BookingModal({ companion, onClose }: { companion: Companion; onClose: (
       setError('Please fill in your name, phone, date, and time.');
       return;
     }
+    const selectedDate = new Date(`${form.booking_date}T00:00:00`);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (isNaN(selectedDate.getTime()) || selectedDate < today) {
+      setError('Please choose a date from today onwards.');
+      return;
+    }
 setSubmitting(true);
     let newId: string;
     if (isSupabaseConfigured) {
@@ -227,28 +255,34 @@ setSubmitting(true);
     setSuccess(true);
 
     // Fire-and-forget notification to admin via edge function
-    try {
-      const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-booking`;
-      fetch(fnUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          companion_name: companion.name,
-          client_name: form.client_name,
-          client_phone: form.client_phone,
-          client_email: form.client_email,
-          booking_date: form.booking_date,
-          start_time: form.start_time,
-          duration_hours: form.duration_hours,
-          meeting_point: form.meeting_point,
-          total_price: form.total_price,
-          notes: form.notes,
-        }),
-      }).catch(() => {});
-    } catch {}
+    const fnBase = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const fnKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (fnBase && fnKey) {
+      try {
+        const fnUrl = `${fnBase}/functions/v1/notify-booking`;
+        fetch(fnUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${fnKey}`,
+          },
+          body: JSON.stringify({
+            companion_name: companion.name,
+            client_name: form.client_name,
+            client_phone: form.client_phone,
+            client_email: form.client_email,
+            booking_date: form.booking_date,
+            start_time: form.start_time,
+            duration_hours: form.duration_hours,
+            meeting_point: form.meeting_point,
+            total_price: form.total_price,
+            notes: form.notes,
+          }),
+        }).catch(() => {});
+      } catch {
+        // ignore
+      }
+    }
   };
 
   useEffect(() => {
@@ -325,7 +359,7 @@ setSubmitting(true);
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Date" required>
-                  <input type="date" value={form.booking_date} onChange={(e) => update('booking_date', e.target.value)} className={inputClass} />
+                  <input type="date" min={new Date().toISOString().split('T')[0]} value={form.booking_date} onChange={(e) => update('booking_date', e.target.value)} className={inputClass} />
                 </Field>
                 <Field label="Start time" required>
                   <input type="time" value={form.start_time} onChange={(e) => update('start_time', e.target.value)} className={inputClass} />

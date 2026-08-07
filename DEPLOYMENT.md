@@ -89,6 +89,8 @@ Your app will be live at `https://<your-site>.netlify.app`.
      - Creates `reviews` table + trigger that auto-updates companion ratings.
    - `supabase/migrations/20260806144840_add_companion_write_policies.sql`
      - Adds INSERT/UPDATE/DELETE policies on `companions` for the admin panel.
+   - `supabase/migrations/20260806150000_add_companion_phone.sql`
+     - Adds the `companions.phone` column and backfills seeded numbers for the Call / WhatsApp buttons.
 
 3. Get your API credentials from **Settings → API**:
    - `Project URL` (e.g. `https://abcdefgh.supabase.co`)
@@ -149,7 +151,7 @@ Add them:
 - [ ] `/browse` search and filters work.
 - [ ] A companion detail page shows photos, bio, and reviews.
 - [ ] Booking flow saves a booking locally and shows confirmation.
-- [ ] Admin panel (`#/admin`) lets you add/edit/delete companions.
+- [ ] Admin panel (`#/admin`) lets you register/edit/delete companions and shows tap stats.
 - [ ] PWA install prompt appears (desktop/mobile).
 - [ ] Basic offline caching works (service worker).
 

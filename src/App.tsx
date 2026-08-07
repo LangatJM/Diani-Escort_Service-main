@@ -1,6 +1,8 @@
 import { Header } from '@/components/Header';
 import { Footer } from '@/components/Footer';
+import { AgeGate } from '@/components/AgeGate';
 import { useRoute } from '@/lib/router';
+import { useTapTracker } from '@/hooks/useTapTracker';
 import { HomePage } from '@/pages/HomePage';
 import { BrowsePage } from '@/pages/BrowsePage';
 import { DetailPage } from '@/pages/DetailPage';
@@ -10,9 +12,11 @@ import { AdminPage } from '@/pages/AdminPage';
 
 function App() {
   const route = useRoute();
+  useTapTracker();
 
   return (
     <div className="flex min-h-screen flex-col bg-ocean-950">
+      <AgeGate />
       <Header route={route} />
       <div className="flex-1">
         {route.name === 'home' && <HomePage />}

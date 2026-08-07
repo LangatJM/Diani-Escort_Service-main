@@ -1,5 +1,6 @@
 export function formatKES(amount: number): string {
-  return 'KES ' + new Intl.NumberFormat('en-KE').format(Math.round(amount));
+  const safe = Number.isFinite(amount) ? amount : 0;
+  return 'KES ' + new Intl.NumberFormat('en-KE').format(Math.round(safe));
 }
 
 export function formatDate(dateStr: string): string {

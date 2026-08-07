@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Trash2, Edit3, X, Loader2, ShieldCheck, Search,
-  ToggleLeft, ToggleRight, BadgeCheck, Star,
+  ToggleLeft, ToggleRight, BadgeCheck, Star, BarChart3, Eye, RefreshCcw,
 } from 'lucide-react';
-import { supabase, type Companion } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, type Companion } from '@/lib/supabase';
+import { demoCompanions } from '@/lib/demoData';
 import { formatKES } from '@/lib/format';
+import { getTapStats, resetTapStats, formatTapTime } from '@/lib/tapTracker';
 
 const ADMIN_PASSWORD = 'diani-admin-2026';
 const STORAGE_KEY = 'diani_admin_auth';
@@ -38,6 +40,7 @@ function editToCompanion(e: EditData): Omit<Companion, 'id' | 'created_at'> {
     reviews: e.reviews || 0,
     verified: e.verified || false,
     available: e.available || false,
+    phone: e.phone || null,
     image_url: e.image_url || null,
     gallery: (e.gallery_str || '').split('\n').map((s) => s.trim()).filter(Boolean),
   };
@@ -56,9 +59,14 @@ const emptyCompanion: EditData = {
   reviews: 0,
   verified: false,
   available: true,
+  phone: '+2547',
   image_url: '',
   gallery_str: '',
 };
+
+function makeId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export function AdminPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem(STORAGE_KEY) === 'yes');
@@ -75,16 +83,28 @@ export function AdminPage() {
   const [saveError, setSaveError] = useState('');
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [statsTick, setStatsTick] = useState(0);
 
   const loadCompanions = async () => {
     setLoading(true);
-    const { data } = await supabase.from('companions').select('*').order('created_at', { ascending: false });
-    setCompanions((data as Companion[]) || []);
+    if (!isSupabaseConfigured) {
+      setCompanions([...demoCompanions]);
+      setLoading(false);
+      return;
+    }
+    const { data, error } = await supabase.from('companions').select('*').order('created_at', { ascending: false });
+    if (error) {
+      setNotice('Could not load companions from the database.');
+    } else {
+      setCompanions((data as Companion[]) || []);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
     if (authed) loadCompanions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
 
   const tryAuth = () => {
@@ -119,6 +139,25 @@ export function AdminPage() {
       setSaving(false);
       return;
     }
+    if (!isSupabaseConfigured) {
+      // Demo mode: mutate in-memory array so the panel stays fully functional.
+      if (isNew) {
+        const created: Companion = {
+          ...payload,
+          id: makeId('demo'),
+          created_at: new Date().toISOString(),
+        };
+        setCompanions((prev) => [created, ...prev]);
+      } else if (editing.id) {
+        setCompanions((prev) =>
+          prev.map((c) => (c.id === editing.id ? { ...c, ...payload, id: editing.id! } : c))
+        );
+      }
+      setSaving(false);
+      setEditing(null);
+      setNotice(isNew ? 'Companion registered (demo mode).' : 'Companion updated (demo mode).');
+      return;
+    }
     let result;
     if (isNew) {
       result = await supabase.from('companions').insert(payload).select('*').maybeSingle();
@@ -136,21 +175,36 @@ export function AdminPage() {
       return;
     }
     setEditing(null);
+    setNotice(isNew ? 'Companion registered successfully.' : 'Companion updated successfully.');
     await loadCompanions();
   };
 
   const toggleAvailable = async (c: Companion) => {
+    if (!isSupabaseConfigured) {
+      setCompanions((prev) => prev.map((x) => (x.id === c.id ? { ...x, available: !x.available } : x)));
+      return;
+    }
     await supabase.from('companions').update({ available: !c.available }).eq('id', c.id);
     await loadCompanions();
   };
 
   const toggleVerified = async (c: Companion) => {
+    if (!isSupabaseConfigured) {
+      setCompanions((prev) => prev.map((x) => (x.id === c.id ? { ...x, verified: !x.verified } : x)));
+      return;
+    }
     await supabase.from('companions').update({ verified: !c.verified }).eq('id', c.id);
     await loadCompanions();
   };
 
   const confirmDelete = async () => {
     if (!deletingId) return;
+    if (!isSupabaseConfigured) {
+      setCompanions((prev) => prev.filter((c) => c.id !== deletingId));
+      setDeletingId(null);
+      setNotice('Companion removed (demo mode).');
+      return;
+    }
     await supabase.from('companions').delete().eq('id', deletingId);
     setDeletingId(null);
     await loadCompanions();
@@ -160,6 +214,11 @@ export function AdminPage() {
     const q = query.trim().toLowerCase();
     return !q || [c.name, c.tagline || '', c.location || ''].join(' ').toLowerCase().includes(q);
   });
+
+  const tapStats = getTapStats();
+  const topPages = Object.entries(tapStats.byPage)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
 
   if (!authed) {
     return (
@@ -206,9 +265,64 @@ export function AdminPage() {
           onClick={startNew}
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-ocean-400 px-5 py-3 text-sm font-bold text-ocean-950 transition hover:bg-ocean-300"
         >
-          <Plus size={18} /> Add companion
+          <Plus size={18} /> Register provider
         </button>
       </div>
+
+      {!isSupabaseConfigured && (
+        <div className="mt-6 rounded-2xl border border-sand-400/25 bg-sand-400/10 p-4 text-sm text-white/75">
+          You are running in <span className="font-bold text-sand-300">demo mode</span> — changes are kept in
+          memory for this session only. Configure Supabase (see README) to persist data.
+        </div>
+      )}
+
+      {notice && (
+        <div className="mt-6 flex items-center justify-between rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-white/60 hover:text-white"><X size={16} /></button>
+        </div>
+      )}
+
+      {/* Tap / engagement stats */}
+      <section className="mt-8 grid gap-4 sm:grid-cols-3" onClick={() => setStatsTick(statsTick + 1)}>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/45">
+            <Eye size={14} className="text-ocean-300" /> Total taps
+          </div>
+          <p className="mt-3 font-display text-4xl font-semibold text-white">{tapStats.total.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/45">
+            <BarChart3 size={14} className="text-ocean-300" /> Taps today
+          </div>
+          <p className="mt-3 font-display text-4xl font-semibold text-white">{tapStats.today.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/45">
+            <RefreshCcw size={14} className="text-ocean-300" /> Last activity
+          </div>
+          <p className="mt-3 text-sm font-semibold text-white/80">{formatTapTime(tapStats.lastTapAt)}</p>
+        </div>
+      </section>
+
+      {topPages.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-white/45">Most visited sections</p>
+          <div className="flex flex-wrap gap-2">
+            {topPages.map(([page, count]) => (
+              <span key={page} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70">
+                <span className="font-bold text-ocean-300">{page}</span> {count} taps
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={() => { resetTapStats(); setStatsTick(statsTick + 1); }}
+            className="mt-4 text-xs font-semibold text-white/40 hover:text-coral-400"
+          >
+            Reset tap stats
+          </button>
+        </div>
+      )}
 
       <div className="mt-8 relative max-w-md">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={18} />
@@ -253,6 +367,7 @@ export function AdminPage() {
                   </span>
                   <span>{formatKES(c.price_per_hour)}/hr</span>
                   <span>{c.location}</span>
+                  {c.phone && <span>{c.phone}</span>}
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -294,7 +409,7 @@ export function AdminPage() {
           <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-ocean-900 p-6 animate-scale-in">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-2xl font-semibold text-white">
-                {isNew ? 'Add companion' : 'Edit companion'}
+                {isNew ? 'Register service provider' : 'Edit companion'}
               </h2>
               <button onClick={() => setEditing(null)} className="grid h-9 w-9 place-items-center rounded-xl text-white/60 hover:bg-white/8">
                 <X size={20} />
@@ -317,16 +432,19 @@ export function AdminPage() {
               <Field label="Price per hour (KES)">
                 <input type="number" value={editing.price_per_hour || 0} onChange={(e) => setEditing({ ...editing, price_per_hour: parseInt(e.target.value) || 0 })} className={inputCls} />
               </Field>
+              <Field label="Phone (for Call / WhatsApp)">
+                <input value={editing.phone || ''} onChange={(e) => setEditing({ ...editing, phone: e.target.value })} placeholder="+254 712 345 678" className={inputCls} />
+              </Field>
               <Field label="Image URL">
                 <input value={editing.image_url || ''} onChange={(e) => setEditing({ ...editing, image_url: e.target.value })} className={inputCls} />
               </Field>
-              <Field label="Languages (comma separated)" full>
+              <Field label="Languages (comma separated)">
                 <input value={editing.languages_str || ''} onChange={(e) => setEditing({ ...editing, languages_str: e.target.value })} className={inputCls} />
               </Field>
-              <Field label="Interests (comma separated)" full>
+              <Field label="Interests (comma separated)">
                 <input value={editing.interests_str || ''} onChange={(e) => setEditing({ ...editing, interests_str: e.target.value })} className={inputCls} />
               </Field>
-              <Field label="Gallery URLs (one per line)" full>
+              <Field label="Gallery URLs (one per line)">
                 <textarea value={editing.gallery_str || ''} onChange={(e) => setEditing({ ...editing, gallery_str: e.target.value })} rows={3} className={`${inputCls} resize-none`} />
               </Field>
               <Field label="Bio" full>
@@ -347,7 +465,7 @@ export function AdminPage() {
 
             <div className="mt-6 flex gap-3">
               <button onClick={save} disabled={saving} className="flex-1 rounded-xl bg-ocean-400 py-3 text-sm font-bold text-ocean-950 transition hover:bg-ocean-300 disabled:opacity-50">
-                {saving ? 'Saving…' : isNew ? 'Create companion' : 'Save changes'}
+                {saving ? 'Saving…' : isNew ? 'Register provider' : 'Save changes'}
               </button>
               <button onClick={() => setEditing(null)} className="rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white/70 hover:bg-white/8">
                 Cancel
@@ -388,3 +506,4 @@ function Field({ label, children, full }: { label: string; children: React.React
     </div>
   );
 }
+

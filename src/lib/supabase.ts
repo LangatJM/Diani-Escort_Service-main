@@ -28,6 +28,7 @@ export type Companion = {
   reviews: number;
   verified: boolean;
   available: boolean;
+  phone: string | null;
   image_url: string | null;
   gallery: string[];
   created_at: string;

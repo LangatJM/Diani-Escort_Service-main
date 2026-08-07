@@ -17,6 +17,7 @@ export const demoCompanions: Companion[] = [
     reviews: 37,
     verified: true,
     available: true,
+    phone: '+254712100001',
     image_url: 'https://images.pexels.com/photos/1858175/pexels-photo-1858175.jpeg?auto=compress&cs=tinysrgb&w=800',
     gallery: [
       'https://images.pexels.com/photos/1457897/pexels-photo-1457897.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -38,6 +39,7 @@ export const demoCompanions: Companion[] = [
     reviews: 29,
     verified: true,
     available: true,
+    phone: '+254712100002',
     image_url: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=800',
     gallery: [
       'https://images.pexels.com/photos/2167673/pexels-photo-2167673.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -59,6 +61,7 @@ export const demoCompanions: Companion[] = [
     reviews: 52,
     verified: true,
     available: true,
+    phone: '+254712100003',
     image_url: 'https://images.pexels.com/photos/2204573/pexels-photo-2204573.jpeg?auto=compress&cs=tinysrgb&w=800',
     gallery: [
       'https://images.pexels.com/photos/247431/pexels-photo-247431.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -80,6 +83,7 @@ export const demoCompanions: Companion[] = [
     reviews: 18,
     verified: true,
     available: false,
+    phone: '+254712100004',
     image_url: 'https://images.pexels.com/photos/3865711/pexels-photo-3865711.jpeg?auto=compress&cs=tinysrgb&w=800',
     gallery: [
       'https://images.pexels.com/photos/3822906/pexels-photo-3822906.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -101,6 +105,7 @@ export const demoCompanions: Companion[] = [
     reviews: 14,
     verified: false,
     available: true,
+    phone: '+254712100005',
     image_url: 'https://images.pexels.com/photos/1681010/pexels-photo-1681010.jpeg?auto=compress&cs=tinysrgb&w=800',
     gallery: [
       'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=800',
@@ -122,6 +127,7 @@ export const demoCompanions: Companion[] = [
     reviews: 41,
     verified: true,
     available: true,
+    phone: '+254712100006',
     image_url: 'https://images.pexels.com/photos/2167394/pexels-photo-2167394.jpeg?auto=compress&cs=tinysrgb&w=800',
     gallery: [
       'https://images.pexels.com/photos/261383/pexels-photo-261383.jpeg?auto=compress&cs=tinysrgb&w=800',

@@ -16,13 +16,21 @@ export function getLocalBookings(): LocalBooking[] {
   }
 }
 
+function writeLocalBookings(all: LocalBooking[]) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(all));
+  } catch {
+    // Storage may be unavailable (private mode, quota). Silently skip persisting.
+  }
+}
+
 export function saveLocalBooking(booking: LocalBooking) {
   const all = getLocalBookings();
   all.unshift(booking);
-  localStorage.setItem(KEY, JSON.stringify(all.slice(0, 50)));
+  writeLocalBookings(all.slice(0, 50));
 }
 
 export function removeLocalBooking(id: string) {
   const all = getLocalBookings().filter((b) => b.id !== id);
-  localStorage.setItem(KEY, JSON.stringify(all));
+  writeLocalBookings(all);
 }

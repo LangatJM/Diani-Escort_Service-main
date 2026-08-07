@@ -1,17 +1,32 @@
-# Bug Fix Plan - Diani Companion
+# Implementation Plan - Diani Companion
 
+## Bug Fixes
 - [x] Analyze codebase & run build to identify bugs
-- [x] Fix `lucide-react` broken version (no type declarations) in package.json → `0.469.0`
-- [x] Fix `@` path alias in vite.config.ts (invalid `tsconfigPaths` option) → proper resolve.alias
-- [x] Downgrade Vite 8 (rolldown incompatible with Node 25) → Vite 5.4.21 (stable, Rollup-based)
-- [x] Run `npm install` to reinstall corrected dependencies
-- [x] Run `npm run build` to verify zero errors → SUCCESS (1644 modules, built in 17.77s)
-- [x] Start dev server and open in browser (http://localhost:5173 → HTTP 200)
+- [x] Fix `index.html` apple-touch-icon pointing to non-existent icon-192.png (generated PNG icons)
+- [x] Fix `bookingsStore.ts` - wrap localStorage.setItem in try/catch
+- [x] Fix `format.ts` - guard against NaN/invalid input
+- [x] Fix `DetailPage.tsx` - gallery fallback, past-date validation, guard notification fetch
+- [x] Fix `AdminPage.tsx` - handle demo mode when Supabase not configured
+- [x] Fix `public/sw.js` - add .catch() on caches.put
+- [x] Fix `manifest.webmanifest` - add proper PNG icons (192/512 + maskable)
 
-## Blank screen fix (runtime crash)
-- Root cause: no `.env` file → `createClient(undefined, undefined)` threw at module load, crashing the whole React tree.
-- Fix: `supabase.ts` now tolerates missing env vars and exports `isSupabaseConfigured`.
-- Added `src/lib/demoData.ts` with bundled companions/reviews so the site renders and is fully browsable in DEMO MODE without a backend.
-- `useCompanions`, `ReviewsSection`, `DetailPage` now fall back to demo data when Supabase isn't configured.
-- Added `.env.example` documenting how to enable the real backend.
-- Verified: `npm run build` passes (1645 modules, 0 errors); dev server serves full HTML (1375 bytes).
+## New Features
+- [x] Create `AgeGate.tsx` - over-18 disclaimer popup (sessionStorage)
+- [x] Wire AgeGate into `App.tsx`
+- [x] Add `phone` field to `Companion` type in `supabase.ts`
+- [x] Add phone numbers to demo companions in `demoData.ts`
+- [x] Add Call & WhatsApp buttons to `DetailPage.tsx`
+- [x] Add Phone field to `AdminPage.tsx` add/edit form
+- [x] Add migration for `companions.phone` column
+
+## Admin Enhancements
+- [x] Create `tapTracker.ts` - tap counting in localStorage
+- [x] Create `useTapTracker` hook - global click listener
+- [x] Add tap-stats display to AdminPage dashboard
+- [x] Hide Admin link from Footer (not visible to regular users)
+- [x] Keep admin route accessible via direct URL (#/admin)
+
+## Verification
+- [x] Run `npm run build` - verify zero errors (1648 modules, 0 errors)
+- [x] Start dev server (HTTP 200) and open site in browser for review
+- [x] Verify icons & manifest served correctly
