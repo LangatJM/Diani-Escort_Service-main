@@ -1,0 +1,14 @@
+{
+  "name": "Diani Companion",
+  "short_name": "Diani",
+  "description": "Browse and book vetted local companions in Diani Beach, Kenya.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1f2a",
+  "theme_color": "#0ea5a4",
+  "orientation": "portrait",
+  "categories": ["lifestyle", "travel"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
