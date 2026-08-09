@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Trash2, Edit3, X, Loader2, ShieldCheck, Search,
-ToggleLeft, ToggleRight, BadgeCheck, Star, BarChart3, Eye, RefreshCcw,
+  ToggleLeft, ToggleRight, BadgeCheck, Star, BarChart3, Eye, RefreshCcw,
   LogOut, Lock, Mail, CalendarDays,
 } from 'lucide-react';
 import {
   supabase, isSupabaseConfigured, type Companion, type Booking,
   signInAdmin, signOutAdmin, getAdminSession, isCurrentUserAdmin,
+  deleteCompanionImage,
 } from '@/lib/supabase';
 import { navigate } from '@/lib/router';
 import { demoCompanions } from '@/lib/demoData';
 import { formatKES } from '@/lib/format';
 import { getTapStats, resetTapStats, formatTapTime } from '@/lib/tapTracker';
+import { ImageUploader } from '@/components/ImageUploader';
 
 const ADMIN_PASSWORD = 'diani-admin-2026';
 const STORAGE_KEY = 'diani_admin_auth';
@@ -19,7 +21,7 @@ const STORAGE_KEY = 'diani_admin_auth';
 type EditData = Partial<Companion> & {
   languages_str?: string;
   interests_str?: string;
-  gallery_str?: string;
+  gallery_arr?: string[];
 };
 
 function companionToEdit(c: Companion): EditData {
@@ -27,7 +29,7 @@ function companionToEdit(c: Companion): EditData {
     ...c,
     languages_str: c.languages.join(', '),
     interests_str: c.interests.join(', '),
-    gallery_str: c.gallery.join('\n'),
+    gallery_arr: [...c.gallery],
   };
 }
 
@@ -47,7 +49,7 @@ function editToCompanion(e: EditData): Omit<Companion, 'id' | 'created_at'> {
     available: e.available || false,
     phone: e.phone || null,
     image_url: e.image_url || null,
-    gallery: (e.gallery_str || '').split('\n').map((s) => s.trim()).filter(Boolean),
+    gallery: (e.gallery_arr || []).filter(Boolean),
   };
 }
 
@@ -66,7 +68,7 @@ const emptyCompanion: EditData = {
   available: true,
   phone: '+2547',
   image_url: '',
-  gallery_str: '',
+  gallery_arr: [],
 };
 
 function makeId(prefix: string): string {
@@ -323,6 +325,34 @@ export function AdminPage() {
     await loadCompanions();
   };
 
+  // ===== Image handlers for the edit/create form =====
+  const setPrimaryImage = (url: string) => {
+    if (!editing) return;
+    setEditing({ ...editing, image_url: url });
+  };
+
+  const removePrimaryImage = async () => {
+    if (!editing) return;
+    if (editing.image_url) await deleteCompanionImage(editing.image_url);
+    setEditing({ ...editing, image_url: null });
+  };
+
+  const addGalleryImage = (url: string) => {
+    if (!editing) return;
+    const arr = editing.gallery_arr || [];
+    if (arr.length < 8) {
+      setEditing({ ...editing, gallery_arr: [...arr, url] });
+    }
+  };
+
+  const removeGalleryImage = async (index: number) => {
+    if (!editing) return;
+    const arr = editing.gallery_arr || [];
+    const removed = arr[index];
+    if (removed) await deleteCompanionImage(removed);
+    setEditing({ ...editing, gallery_arr: arr.filter((_, i) => i !== index) });
+  };
+
   const filtered = companions.filter((c) => {
     const q = query.trim().toLowerCase();
     return !q || [c.name, c.tagline || '', c.location || ''].join(' ').toLowerCase().includes(q);
@@ -352,7 +382,7 @@ export function AdminPage() {
     );
   }
 
-if (!unlocked && authState !== 'authed') {
+  if (!unlocked && authState !== 'authed') {
     // Clients (and anyone without the unlock shortcut) see a generic not-found screen —
     // the admin login is never exposed to the public.
     return (
@@ -702,15 +732,37 @@ if (!unlocked && authState !== 'authed') {
               <Field label="Image URL">
                 <input value={editing.image_url || ''} onChange={(e) => setEditing({ ...editing, image_url: e.target.value })} className={inputCls} />
               </Field>
+
+              {/* Primary image uploader */}
+              <div className="sm:col-span-2">
+                <ImageUploader
+                  label="Profile photo (drag & drop)"
+                  images={[editing.image_url || null]}
+                  onRemove={removePrimaryImage}
+                  onUpload={setPrimaryImage}
+                  hint="Set the main profile photo"
+                />
+              </div>
+
               <Field label="Languages (comma separated)">
                 <input value={editing.languages_str || ''} onChange={(e) => setEditing({ ...editing, languages_str: e.target.value })} className={inputCls} />
               </Field>
               <Field label="Interests (comma separated)">
                 <input value={editing.interests_str || ''} onChange={(e) => setEditing({ ...editing, interests_str: e.target.value })} className={inputCls} />
               </Field>
-              <Field label="Gallery URLs (one per line)">
-                <textarea value={editing.gallery_str || ''} onChange={(e) => setEditing({ ...editing, gallery_str: e.target.value })} rows={3} className={`${inputCls} resize-none`} />
-              </Field>
+
+              {/* Gallery uploader */}
+              <div className="sm:col-span-2">
+                <ImageUploader
+                  label="Gallery photos (drag & drop)"
+                  images={editing.gallery_arr || []}
+                  onRemove={removeGalleryImage}
+                  onUpload={addGalleryImage}
+                  multiple
+                  hint="Add up to 8 gallery images"
+                />
+              </div>
+
               <Field label="Bio" full>
                 <textarea value={editing.bio || ''} onChange={(e) => setEditing({ ...editing, bio: e.target.value })} rows={3} className={`${inputCls} resize-none`} />
               </Field>

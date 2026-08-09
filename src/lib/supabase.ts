@@ -112,3 +112,41 @@ export async function onAdminAuthChange(callback: (session: ReturnType<typeof ge
   });
   return () => data.subscription.unsubscribe();
 }
+
+// ===== Image upload helpers (Supabase Storage) =====
+// Companion photos are uploaded to the public "companion-images" bucket and the
+// returned public URL is stored on the companion record.
+
+export const IMAGE_BUCKET = 'companion-images';
+
+function storageAvailable(): boolean {
+  return isSupabaseConfigured && !!supabase.storage;
+}
+
+// Upload a File to Storage and return its public URL. Generates a unique path
+// per upload so files never collide. Returns null on failure.
+export async function uploadCompanionImage(file: File, folder: string = 'gallery'): Promise<string | null> {
+  if (!storageAvailable()) return null;
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext) ? ext : 'jpg';
+  const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+    contentType: file.type || `image/${safeExt}`,
+  });
+  if (error) return null;
+  const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+// Delete an object from Storage by its public URL. Safe to call even if the URL
+// is an external URL (not in our bucket) — it just returns without error.
+export async function deleteCompanionImage(publicUrl: string): Promise<void> {
+  if (!storageAvailable()) return;
+  const base = supabase.storage.from(IMAGE_BUCKET).getPublicUrl('').data.publicUrl;
+  const bucketRoot = base.replace(/\/$/, '');
+  if (!publicUrl.startsWith(bucketRoot)) return; // external URL — nothing to delete in storage
+  const path = publicUrl.slice(bucketRoot.length + 1);
+  await supabase.storage.from(IMAGE_BUCKET).remove([path]);
+}
