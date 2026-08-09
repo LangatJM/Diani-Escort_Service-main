@@ -91,6 +91,8 @@ Your app will be live at `https://<your-site>.netlify.app`.
      - Adds INSERT/UPDATE/DELETE policies on `companions` for the admin panel.
    - `supabase/migrations/20260806150000_add_companion_phone.sql`
      - Adds the `companions.phone` column and backfills seeded numbers for the Call / WhatsApp buttons.
+   - `supabase/migrations/20260806153000_add_admin_auth_and_booking_read.sql`
+     - Creates the `admins` table + `is_admin()` helper, locks companion writes and booking reads to the owner via RLS (secure "only me" admin), and enables booking monitoring in the dashboard.
 
 3. Get your API credentials from **Settings → API**:
    - `Project URL` (e.g. `https://abcdefgh.supabase.co`)
