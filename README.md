@@ -13,8 +13,9 @@ Built with **React 19 + TypeScript + Vite + Tailwind CSS v4**, and an optional *
 - **Companion detail pages** — photos, bio, interests, hourly rate, reviews, plus **Call** and **WhatsApp** buttons.
 - **Booking flow** — request a date, time, duration, and meeting point; bookings are saved locally on your device.
 - **Reviews** — visitors can leave ratings and comments (with automatic rating aggregation when Supabase is connected).
-- **Admin panel** — password-gated UI (hidden from public nav, accessible directly via `#/admin`) to register, edit, toggle, and delete companion listings.
-- **Tap tracking** — the admin dashboard shows total taps, taps today, last activity, and most-visited sections.
+- **Admin panel** — secure, owner-only UI (hidden from public nav, accessible directly via `#/admin`) to register, edit, toggle, and delete companion listings. Uses Supabase Auth in production and a client-side password in demo mode.
+- **Usage dashboard** — the admin dashboard shows total taps, taps today, last activity, most-visited sections, most-viewed companions, and (with Supabase) recent booking requests.
+- **Tap tracking** — tracks engagement locally (total taps, taps today, most-visited sections, per-companion detail views).
 - **PWA** — installable, with offline service-worker caching.
 - **Demo mode** — runs fully without a backend using bundled sample data.
 
@@ -112,6 +113,7 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
    - `20260806143325_create_reviews_and_rating_trigger.sql`
    - `20260806144840_add_companion_write_policies.sql`
    - `20260806150000_add_companion_phone.sql` (adds `phone` for Call / WhatsApp buttons)
+   - `20260806153000_add_admin_auth_and_booking_read.sql` (secure "only me" admin auth + booking monitoring)
 
 5. Deploy the `notify-booking` edge function (see `DEPLOYMENT.md`).
 
@@ -129,9 +131,34 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ## 🔐 Admin Panel
 
-The admin panel is at `#/admin` (hidden from public navigation). It is gated by a **client-side password** stored in `src/pages/AdminPage.tsx` (`ADMIN_PASSWORD`).
+The admin panel is at `#/admin` (hidden from public navigation). It is **reserved for the owner only** and behavior depends on whether Supabase is configured:
 
-> ⚠️ **Security note:** The password is embedded in the client bundle, so this is suitable only for a low-trust demo. For production, move admin writes behind a Supabase auth role and server-side policy check instead of the client-side password.
+- **Production (Supabase configured):** Sign in with your **Supabase Auth** email and password. Access is enforced server-side — only the user listed in the `admins` table may add, edit, or delete companions and view booking requests. Companion writes and booking reads are restricted by Row Level Security (see `20260806153000_add_admin_auth_and_booking_read.sql`).
+- **Demo mode (no Supabase):** Falls back to a client-side password (`ADMIN_PASSWORD` in `src/pages/AdminPage.tsx`). Changes are kept in memory only.
+
+### Setting up your admin account (production)
+
+1. Run the migration `supabase/migrations/20260806153000_add_admin_auth_and_booking_read.sql` in the Supabase SQL Editor (after the other migrations).
+2. Create a Supabase Auth user for yourself (e.g. **Authentication → Users → Add user**).
+3. Register that user as an admin:
+   ```sql
+   INSERT INTO admins (id, email)
+   SELECT id, email FROM auth.users WHERE email = '<your-admin-email>';
+   ```
+4. Sign in at `#/admin` with that email and password.
+
+> ⚠️ **Security note:** In demo mode the password is embedded in the client bundle, so it is only suitable for local testing. In production, admin access is enforced by Supabase Auth + RLS, not by the client.
+
+### Usage dashboard
+
+The dashboard monitors engagement across the webapp:
+- **Total taps & taps today** — overall engagement.
+- **Last activity** — most recent interaction time.
+- **Most visited sections** — which routes get the most taps.
+- **Most viewed companions** — detail-page views per companion.
+- **Recent booking requests** (Supabase only) — pending/confirmed/completed/cancelled bookings.
+
+> Tap stats are stored locally per device via `localStorage` (see `src/lib/tapTracker.ts`).
 
 ---
 

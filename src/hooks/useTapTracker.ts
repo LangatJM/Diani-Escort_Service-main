@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
-import { recordTap } from '@/lib/tapTracker';
+import { useRoute } from '@/lib/router';
+import { recordTap, recordCompanionView } from '@/lib/tapTracker';
 
 export function useTapTracker() {
+  const route = useRoute();
+
   useEffect(() => {
     const listener = (e: MouseEvent | PointerEvent) => {
       // Only count real pointer interactions on interactive elements.
@@ -19,5 +22,13 @@ export function useTapTracker() {
     document.addEventListener('pointerup', listener, { passive: true });
     return () => document.removeEventListener('pointerup', listener);
   }, []);
+
+  // Track a detail-page view whenever the route points at a companion.
+  // Uses the reactive `route` from the router so it fires on actual navigation.
+  useEffect(() => {
+    if (route.name === 'detail' && route.id) {
+      recordCompanionView(route.id);
+    }
+  }, [route]);
 }
 

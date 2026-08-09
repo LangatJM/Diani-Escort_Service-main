@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   Plus, Trash2, Edit3, X, Loader2, ShieldCheck, Search,
-  ToggleLeft, ToggleRight, BadgeCheck, Star, BarChart3, Eye, RefreshCcw,
+ToggleLeft, ToggleRight, BadgeCheck, Star, BarChart3, Eye, RefreshCcw,
+  LogOut, Lock, Mail, CalendarDays,
 } from 'lucide-react';
-import { supabase, isSupabaseConfigured, type Companion } from '@/lib/supabase';
+import {
+  supabase, isSupabaseConfigured, type Companion, type Booking,
+  signInAdmin, signOutAdmin, getAdminSession, isCurrentUserAdmin,
+} from '@/lib/supabase';
+import { navigate } from '@/lib/router';
 import { demoCompanions } from '@/lib/demoData';
 import { formatKES } from '@/lib/format';
 import { getTapStats, resetTapStats, formatTapTime } from '@/lib/tapTracker';
@@ -69,13 +74,33 @@ function makeId(prefix: string): string {
 }
 
 export function AdminPage() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem(STORAGE_KEY) === 'yes');
+  // Auth state: 'idle' | 'checking' | 'authed' | 'denied'
+  const [authState, setAuthState] = useState<'idle' | 'checking' | 'authed' | 'denied'>('idle');
+  const [unlocked, setUnlocked] = useState(false);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+
+  // Hidden unlock: clients visiting #/admin see a generic "not found" screen.
+  // The owner reveals the login with Ctrl+Shift+A (or Cmd+Shift+A on Mac).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        setUnlocked(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const [companions, setCompanions] = useState<Companion[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
 
   const [editing, setEditing] = useState<EditData | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -102,19 +127,107 @@ export function AdminPage() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    if (authed) loadCompanions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed]);
+  const loadBookings = async () => {
+    if (!isSupabaseConfigured) return;
+    setBookingsLoading(true);
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (!error) setBookings((data as Booking[]) || []);
+    setBookingsLoading(false);
+  };
 
-  const tryAuth = () => {
+  // On mount: if Supabase is configured, check for an existing admin session.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isSupabaseConfigured) {
+        // Demo mode uses the client-side password gate.
+        if (sessionStorage.getItem(STORAGE_KEY) === 'yes') {
+          setAuthState('authed');
+          return;
+        }
+        setAuthState('idle');
+        return;
+      }
+      setAuthState('checking');
+      const session = await getAdminSession();
+      if (cancelled) return;
+      if (session?.user) {
+        const admin = await isCurrentUserAdmin();
+        if (cancelled) return;
+        if (admin) {
+          setAuthEmail(session.user.email || '');
+          setAuthState('authed');
+        } else {
+          // Signed in as a non-admin user — sign them out and show the login.
+          await signOutAdmin();
+          if (!cancelled) setAuthState('idle');
+        }
+      } else {
+        setAuthState('idle');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load companions + bookings once authenticated.
+  useEffect(() => {
+    if (authState === 'authed') {
+      loadCompanions();
+      loadBookings();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState]);
+
+  const tryAuth = async () => {
+    setAuthError('');
+    if (isSupabaseConfigured) {
+      setAuthState('checking');
+      if (!email.trim() || !password) {
+        setAuthError('Enter your admin email and password.');
+        setAuthState('idle');
+        return;
+      }
+      const { error } = await signInAdmin(email.trim(), password);
+      if (error) {
+        setAuthError('Invalid email or password.');
+        setAuthState('idle');
+        return;
+      }
+      const admin = await isCurrentUserAdmin();
+      if (admin) {
+        setAuthEmail(email.trim());
+        setAuthState('authed');
+      } else {
+        // Authenticated but not an admin — restrict access.
+        await signOutAdmin();
+        setAuthError('This account is not authorised to manage the site.');
+        setAuthState('idle');
+      }
+      return;
+    }
+    // Demo mode password fallback.
     if (password === ADMIN_PASSWORD) {
       sessionStorage.setItem(STORAGE_KEY, 'yes');
-      setAuthed(true);
-      setAuthError('');
+      setAuthState('authed');
     } else {
       setAuthError('Incorrect password.');
     }
+  };
+
+  const logout = async () => {
+    if (isSupabaseConfigured) {
+      await signOutAdmin();
+    } else {
+      sessionStorage.removeItem(STORAGE_KEY);
+    }
+    setAuthState('idle');
+    setEmail('');
+    setPassword('');
+    setAuthEmail('');
   };
 
   const startNew = () => {
@@ -220,7 +333,46 @@ export function AdminPage() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
-  if (!authed) {
+  const companionViewCounts = Object.entries(tapStats.byCompanion).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topViewedNames = companionViewCounts
+    .map(([id, count]) => ({ name: companions.find((c) => c.id === id)?.name || 'Unknown', count }))
+    .filter((x) => x.name !== 'Unknown');
+
+  const pendingBookings = bookings.filter((b) => b.status === 'pending').length;
+  const todayStr = new Date().toDateString();
+
+  if (authState === 'checking') {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md items-center px-5 pt-32">
+        <div className="w-full text-center">
+          <Loader2 size={28} className="mx-auto animate-spin text-ocean-300" />
+          <p className="mt-4 text-sm text-white/55">Verifying admin session…</p>
+        </div>
+      </main>
+    );
+  }
+
+if (!unlocked && authState !== 'authed') {
+    // Clients (and anyone without the unlock shortcut) see a generic not-found screen —
+    // the admin login is never exposed to the public.
+    return (
+      <main className="mx-auto flex min-h-screen max-w-md items-center px-5 pt-32 text-center">
+        <div className="w-full animate-fade-up">
+          <p className="font-display text-7xl font-semibold text-white/25">404</p>
+          <h1 className="mt-4 font-display text-3xl font-semibold text-white">Page not found</h1>
+          <p className="mt-3 text-sm text-white/50">The page you are looking for does not exist or has been moved.</p>
+          <button
+            onClick={() => navigate('/')}
+            className="mt-8 inline-flex items-center gap-2 rounded-xl bg-ocean-400 px-5 py-3 text-sm font-bold text-ocean-950 transition hover:bg-ocean-300"
+          >
+            Back to home
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (authState !== 'authed') {
     return (
       <main className="mx-auto flex min-h-screen max-w-md items-center px-5 pt-32">
         <div className="w-full animate-fade-up">
@@ -229,17 +381,48 @@ export function AdminPage() {
               <ShieldCheck size={26} />
             </span>
             <h1 className="mt-6 font-display text-4xl font-semibold text-white">Admin access</h1>
-            <p className="mt-3 text-sm text-white/55">Enter the admin password to manage companions.</p>
+            <p className="mt-3 text-sm text-white/55">
+              {isSupabaseConfigured
+                ? 'Sign in with your admin account to manage the site.'
+                : 'Enter the admin password to manage companions.'}
+            </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && tryAuth()}
-              placeholder="Password"
-              className="w-full rounded-xl border border-white/12 bg-white/6 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/35 focus:border-ocean-400/60"
-            />
+            {isSupabaseConfigured && (
+              <div className="mb-4 space-y-3">
+                <div className="relative">
+                  <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Admin email"
+                    className="w-full rounded-xl border border-white/12 bg-white/6 py-3.5 pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/35 focus:border-ocean-400/60"
+                  />
+                </div>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/35" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && tryAuth()}
+                    placeholder="Password"
+                    className="w-full rounded-xl border border-white/12 bg-white/6 py-3.5 pl-11 pr-4 text-sm text-white outline-none placeholder:text-white/35 focus:border-ocean-400/60"
+                  />
+                </div>
+              </div>
+            )}
+            {!isSupabaseConfigured && (
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && tryAuth()}
+                placeholder="Password"
+                className="w-full rounded-xl border border-white/12 bg-white/6 px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/35 focus:border-ocean-400/60"
+              />
+            )}
             {authError && <p className="mt-3 rounded-lg bg-coral-500/10 px-4 py-2.5 text-sm text-coral-400">{authError}</p>}
             <button
               onClick={tryAuth}
@@ -261,18 +444,32 @@ export function AdminPage() {
           <h1 className="font-display text-4xl font-semibold text-white sm:text-5xl">Admin panel</h1>
           <p className="mt-3 text-sm text-white/55">Add, edit, and manage your companion listings.</p>
         </div>
-        <button
-          onClick={startNew}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-ocean-400 px-5 py-3 text-sm font-bold text-ocean-950 transition hover:bg-ocean-300"
-        >
-          <Plus size={18} /> Register provider
-        </button>
+        <div className="flex items-center gap-2">
+          {authEmail && (
+            <span className="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/65 sm:inline-flex">
+              <ShieldCheck size={13} className="text-ocean-300" /> {authEmail}
+            </span>
+          )}
+          <button
+            onClick={startNew}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-ocean-400 px-5 py-3 text-sm font-bold text-ocean-950 transition hover:bg-ocean-300"
+          >
+            <Plus size={18} /> Register provider
+          </button>
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="grid h-11 w-11 place-items-center rounded-xl border border-white/12 text-white/60 transition hover:bg-white/8 hover:text-white"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
       </div>
 
       {!isSupabaseConfigured && (
         <div className="mt-6 rounded-2xl border border-sand-400/25 bg-sand-400/10 p-4 text-sm text-white/75">
           You are running in <span className="font-bold text-sand-300">demo mode</span> — changes are kept in
-          memory for this session only. Configure Supabase (see README) to persist data.
+          memory for this session only. Configure Supabase (see README) to persist data and use secure admin login.
         </div>
       )}
 
@@ -283,7 +480,7 @@ export function AdminPage() {
         </div>
       )}
 
-      {/* Tap / engagement stats */}
+      {/* Engagement / tap stats */}
       <section className="mt-8 grid gap-4 sm:grid-cols-3" onClick={() => setStatsTick(statsTick + 1)}>
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/45">
@@ -305,23 +502,90 @@ export function AdminPage() {
         </div>
       </section>
 
-      {topPages.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-white/45">Most visited sections</p>
-          <div className="flex flex-wrap gap-2">
-            {topPages.map(([page, count]) => (
-              <span key={page} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70">
-                <span className="font-bold text-ocean-300">{page}</span> {count} taps
-              </span>
-            ))}
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {topPages.length > 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="mb-3 text-xs font-bold uppercase tracking-widest text-white/45">Most visited sections</p>
+            <div className="flex flex-wrap gap-2">
+              {topPages.map(([page, count]) => (
+                <span key={page} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70">
+                  <span className="font-bold text-ocean-300">{page}</span> {count} taps
+                </span>
+              ))}
+            </div>
+            <button
+              onClick={() => { resetTapStats(); setStatsTick(statsTick + 1); }}
+              className="mt-4 text-xs font-semibold text-white/40 hover:text-coral-400"
+            >
+              Reset tap stats
+            </button>
           </div>
-          <button
-            onClick={() => { resetTapStats(); setStatsTick(statsTick + 1); }}
-            className="mt-4 text-xs font-semibold text-white/40 hover:text-coral-400"
-          >
-            Reset tap stats
-          </button>
-        </div>
+        )}
+        {topViewedNames.length > 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+            <p className="mb-3 text-xs font-bold uppercase tracking-widest text-white/45">Most viewed companions</p>
+            <div className="flex flex-col gap-2.5">
+              {topViewedNames.map(({ name, count }) => (
+                <div key={name} className="flex items-center justify-between text-sm">
+                  <span className="text-white/75">{name}</span>
+                  <span className="inline-flex items-center gap-1 font-semibold text-ocean-300">
+                    <Eye size={13} /> {count}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Booking monitoring (Supabase only) */}
+      {isSupabaseConfigured && (
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={16} className="text-ocean-300" />
+              <p className="text-xs font-bold uppercase tracking-widest text-white/45">Recent booking requests</p>
+            </div>
+            <button onClick={loadBookings} className="text-xs font-semibold text-white/40 hover:text-ocean-300">
+              Refresh
+            </button>
+          </div>
+          {bookingsLoading ? (
+            <div className="flex items-center gap-3 py-6 text-white/50">
+              <Loader2 size={18} className="animate-spin" /> Loading bookings…
+            </div>
+          ) : bookings.length === 0 ? (
+            <p className="py-6 text-sm text-white/50">No bookings yet. New requests will appear here.</p>
+          ) : (
+            <div className="space-y-3">
+              {bookings.map((b) => (
+                <div key={b.id} className="flex flex-col gap-1 rounded-xl border border-white/8 bg-white/[0.02] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {b.client_name} <span className="font-normal text-white/40">· {b.client_phone}</span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-white/55">
+                      Per {todayStr} · {b.booking_date} at {b.start_time} · {b.duration_hours}h · {formatKES(b.total_price)}
+                    </p>
+                  </div>
+                  <span className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                    b.status === 'pending' ? 'bg-sand-400/15 text-sand-300' :
+                    b.status === 'confirmed' ? 'bg-emerald-500/15 text-emerald-300' :
+                    b.status === 'completed' ? 'bg-ocean-500/15 text-ocean-300' :
+                    'bg-white/8 text-white/40'
+                  }`}>
+                    {b.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {pendingBookings > 0 && (
+            <p className="mt-4 text-xs text-sand-300">
+              {pendingBookings} pending request{pendingBookings === 1 ? '' : 's'} awaiting confirmation.
+            </p>
+          )}
+        </section>
       )}
 
       <div className="mt-8 relative max-w-md">
@@ -506,4 +770,3 @@ function Field({ label, children, full }: { label: string; children: React.React
     </div>
   );
 }
-
