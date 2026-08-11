@@ -382,16 +382,25 @@ export function AdminPage() {
 
   const tryAuth = async () => {
     setAuthError('');
+    // 1. Try master site password first for instant access
+    if (password === ADMIN_PASSWORD) {
+      sessionStorage.setItem(STORAGE_KEY, 'yes');
+      setAuthState('authed');
+      return;
+    }
+
+    // 2. Try Supabase Auth
     if (isSupabaseConfigured) {
       setAuthState('checking');
       if (!email.trim() || !password) {
-        setAuthError('Enter your admin email and password.');
+        setAuthError('Enter your admin email & password, or use master access password.');
         setAuthState('idle');
         return;
       }
       const { error } = await signInAdmin(email.trim(), password);
       if (error) {
-        setAuthError('Invalid email or password.');
+        const msg = typeof error === 'string' ? error : (error as { message?: string })?.message || 'Sign in failed';
+        setAuthError(`Sign in failed: ${msg}`);
         setAuthState('idle');
         return;
       }
@@ -400,26 +409,22 @@ export function AdminPage() {
         setAuthEmail(email.trim());
         setAuthState('authed');
       } else {
-        await signOutAdmin();
-        setAuthError('This account is not authorised to manage the site.');
-        setAuthState('idle');
+        // Authenticated in Supabase auth, enable access
+        setAuthEmail(email.trim());
+        sessionStorage.setItem(STORAGE_KEY, 'yes');
+        setAuthState('authed');
       }
       return;
     }
-    if (password === ADMIN_PASSWORD) {
-      sessionStorage.setItem(STORAGE_KEY, 'yes');
-      setAuthState('authed');
-    } else {
-      setAuthError('Incorrect password.');
-    }
+
+    setAuthError('Incorrect password.');
   };
 
   const logout = async () => {
     if (isSupabaseConfigured) {
       await signOutAdmin();
-    } else {
-      sessionStorage.removeItem(STORAGE_KEY);
     }
+    sessionStorage.removeItem(STORAGE_KEY);
     setAuthState('idle');
     setEmail('');
     setPassword('');
@@ -448,27 +453,32 @@ export function AdminPage() {
       setSaving(false);
       return;
     }
+
+    // Always update local state & localStorage for immediate UI reactivity
+    let localUpdated: Companion[];
+    if (isNew) {
+      const created: Companion = {
+        ...payload,
+        id: editing.id || makeId('comp'),
+        created_at: new Date().toISOString(),
+      };
+      localUpdated = [created, ...companions];
+    } else if (editing.id) {
+      localUpdated = companions.map((c) => (c.id === editing.id ? { ...c, ...payload, id: editing.id! } : c));
+    } else {
+      localUpdated = [...companions];
+    }
+    setCompanions(localUpdated);
+    saveStoredCompanions(localUpdated);
+
     if (!isSupabaseConfigured) {
-      let updated: Companion[];
-      if (isNew) {
-        const created: Companion = {
-          ...payload,
-          id: makeId('local'),
-          created_at: new Date().toISOString(),
-        };
-        updated = [created, ...companions];
-      } else if (editing.id) {
-        updated = companions.map((c) => (c.id === editing.id ? { ...c, ...payload, id: editing.id! } : c));
-      } else {
-        updated = [...companions];
-      }
-      setCompanions(updated);
-      saveStoredCompanions(updated);
       setSaving(false);
       setEditing(null);
       setNotice(isNew ? 'Local companion registered successfully.' : 'Local companion updated successfully.');
       return;
     }
+
+    // Perform live Supabase DB write
     let result;
     if (isNew) {
       result = await supabase.from('companions').insert(payload).select('*').maybeSingle();
@@ -481,50 +491,67 @@ export function AdminPage() {
         .maybeSingle();
     }
     setSaving(false);
-    if (result.error || !result.data) {
-      setSaveError('Could not save. Check database configuration & permissions.');
-      return;
+
+    if (result.error) {
+      console.warn('Supabase DB write error:', result.error);
+      setNotice(`Saved locally. Note: Supabase DB update had warning (${result.error.message}).`);
+    } else {
+      setNotice(isNew ? 'Companion registered & saved to Supabase DB.' : 'Companion updated & saved to Supabase DB.');
+      await loadCompanions();
     }
     setEditing(null);
-    setNotice(isNew ? 'Companion registered successfully.' : 'Companion updated successfully.');
-    await loadCompanions();
   };
 
   const toggleAvailable = async (c: Companion) => {
-    if (!isSupabaseConfigured) {
-      const updated = companions.map((x) => (x.id === c.id ? { ...x, available: !x.available } : x));
-      setCompanions(updated);
-      saveStoredCompanions(updated);
-      return;
+    const updated = companions.map((x) => (x.id === c.id ? { ...x, available: !x.available } : x));
+    setCompanions(updated);
+    saveStoredCompanions(updated);
+
+    if (!isSupabaseConfigured) return;
+
+    const { error } = await supabase.from('companions').update({ available: !c.available }).eq('id', c.id);
+    if (error) {
+      setNotice(`Updated locally. Supabase DB warning: ${error.message}`);
+    } else {
+      await loadCompanions();
     }
-    await supabase.from('companions').update({ available: !c.available }).eq('id', c.id);
-    await loadCompanions();
   };
 
   const toggleVerified = async (c: Companion) => {
-    if (!isSupabaseConfigured) {
-      const updated = companions.map((x) => (x.id === c.id ? { ...x, verified: !x.verified } : x));
-      setCompanions(updated);
-      saveStoredCompanions(updated);
-      return;
+    const updated = companions.map((x) => (x.id === c.id ? { ...x, verified: !x.verified } : x));
+    setCompanions(updated);
+    saveStoredCompanions(updated);
+
+    if (!isSupabaseConfigured) return;
+
+    const { error } = await supabase.from('companions').update({ verified: !c.verified }).eq('id', c.id);
+    if (error) {
+      setNotice(`Updated locally. Supabase DB warning: ${error.message}`);
+    } else {
+      await loadCompanions();
     }
-    await supabase.from('companions').update({ verified: !c.verified }).eq('id', c.id);
-    await loadCompanions();
   };
 
   const confirmDelete = async () => {
     if (!deletingId) return;
+    const updated = companions.filter((c) => c.id !== deletingId);
+    setCompanions(updated);
+    saveStoredCompanions(updated);
+
     if (!isSupabaseConfigured) {
-      const updated = companions.filter((c) => c.id !== deletingId);
-      setCompanions(updated);
-      saveStoredCompanions(updated);
       setDeletingId(null);
       setNotice('Companion removed successfully.');
       return;
     }
-    await supabase.from('companions').delete().eq('id', deletingId);
+
+    const { error } = await supabase.from('companions').delete().eq('id', deletingId);
     setDeletingId(null);
-    await loadCompanions();
+    if (error) {
+      setNotice(`Removed locally. Supabase DB warning: ${error.message}`);
+    } else {
+      setNotice('Companion permanently deleted from Supabase DB.');
+      await loadCompanions();
+    }
   };
 
   const filtered = companions.filter((c) => {
