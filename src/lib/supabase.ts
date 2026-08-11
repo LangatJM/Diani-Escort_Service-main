@@ -126,18 +126,41 @@ function storageAvailable(): boolean {
 // Upload a File to Storage and return its public URL. Generates a unique path
 // per upload so files never collide. Returns null on failure.
 export async function uploadCompanionImage(file: File, folder: string = 'gallery'): Promise<string | null> {
-  if (!storageAvailable()) return null;
+  const readAsBase64 = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  if (!storageAvailable()) {
+    return readAsBase64();
+  }
+
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
   const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext) ? ext : 'jpg';
   const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
-  const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, {
-    cacheControl: '3600',
-    upsert: false,
-    contentType: file.type || `image/${safeExt}`,
-  });
-  if (error) return null;
-  const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
-  return data?.publicUrl || null;
+
+  try {
+    const { error } = await supabase.storage.from(IMAGE_BUCKET).upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type || `image/${safeExt}`,
+    });
+
+    if (error) {
+      console.warn('Supabase storage upload error, falling back to Data URL:', error.message);
+      return readAsBase64();
+    }
+
+    const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+    return data?.publicUrl || (await readAsBase64());
+  } catch (err) {
+    console.warn('Storage upload exception, using Data URL fallback:', err);
+    return readAsBase64();
+  }
 }
 
 // Delete an object from Storage by its public URL. Safe to call even if the URL
