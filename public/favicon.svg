@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1f2a" />
+      <stop offset="50%" stop-color="#0d3548" />
+      <stop offset="100%" stop-color="#144d6b" />
+    </linearGradient>
+    <linearGradient id="sunGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ff7b6b" />
+      <stop offset="100%" stop-color="#ffb86c" />
+    </linearGradient>
+    <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00d2ff" />
+      <stop offset="100%" stop-color="#0080ff" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background container -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Outer glow ring -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#00d2ff" stroke-opacity="0.2" stroke-width="8" />
+
+  <!-- Tropical Sun -->
+  <circle cx="256" cy="220" r="90" fill="url(#sunGrad)" />
+
+  <!-- Palm Leaves Silhouette -->
+  <path d="M256 380 C240 310 210 260 140 230 C180 255 210 280 235 320 M256 380 C270 300 310 240 380 210 C340 245 305 275 275 320 M256 380 C230 330 180 300 110 300 C155 315 195 340 225 365 M256 380 C285 335 330 305 400 305 C355 320 315 345 285 368" 
+        fill="none" stroke="#0b1f2a" stroke-width="14" stroke-linecap="round" />
+
+  <path d="M256 380 Q250 280 190 200 Q220 230 240 290 M256 380 Q270 270 340 190 Q310 225 275 290" 
+        fill="none" stroke="#0b1f2a" stroke-width="12" stroke-linecap="round" />
+
+  <!-- Ocean Waves -->
+  <path d="M64 360 Q160 330 256 360 T448 360 L448 448 Q352 470 256 448 T64 448 Z" fill="url(#waveGrad)" opacity="0.85" />
+  <path d="M64 400 Q160 375 256 400 T448 400 L448 448 Q352 475 256 448 T64 448 Z" fill="#00d2ff" opacity="0.95" />
+</svg>

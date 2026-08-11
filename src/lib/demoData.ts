@@ -160,8 +160,35 @@ export const demoReviews: Record<string, Review[]> = {
   ],
 };
 
+const LOCAL_STORAGE_KEY = 'diani_demo_companions';
+
+export function getStoredCompanions(): Companion[] {
+  if (typeof window === 'undefined') return demoCompanions;
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load stored companions:', e);
+  }
+  return demoCompanions;
+}
+
+export function saveStoredCompanions(companions: Companion[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(companions));
+  } catch (e) {
+    console.error('Failed to save companions to localStorage:', e);
+  }
+}
+
 export function findDemoCompanion(id: string): Companion | undefined {
-  return demoCompanions.find((c) => c.id === id);
+  return getStoredCompanions().find((c) => c.id === id);
 }
 
 // Demo booking/review sinks (kept in-memory so the flows still work).

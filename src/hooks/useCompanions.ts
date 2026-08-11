@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured, type Companion } from '@/lib/supabase';
-import { demoCompanions } from '@/lib/demoData';
+import { getStoredCompanions } from '@/lib/demoData';
 
 export function useCompanions() {
   const [companions, setCompanions] = useState<Companion[]>([]);
@@ -12,9 +12,9 @@ export function useCompanions() {
     (async () => {
       setLoading(true);
       if (!isSupabaseConfigured) {
-        // Demo mode: use bundled data so the site renders without a backend.
+        // Demo mode: use local stored companions so changes persist.
         if (!cancelled) {
-          setCompanions([...demoCompanions].sort((a, b) => b.rating - a.rating));
+          setCompanions(getStoredCompanions().sort((a, b) => b.rating - a.rating));
           setError(null);
           setLoading(false);
         }
