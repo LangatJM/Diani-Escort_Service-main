@@ -2,11 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Plus, Trash2, Edit3, X, Loader2, ShieldCheck, Search,
   ToggleLeft, ToggleRight, BadgeCheck, Star, BarChart3, Eye, RefreshCcw,
-<<<<<<< HEAD
-  LogOut, Lock, Mail, CalendarDays,
-=======
   LogOut, Lock, Mail, CalendarDays, UploadCloud, ImagePlus, CheckCircle,
->>>>>>> feat/admin-review-management
 } from 'lucide-react';
 import {
   supabase, isSupabaseConfigured, type Companion, type Booking,
@@ -1000,10 +996,15 @@ export function AdminPage() {
               </Field>
 
               {/* Profile Image Drag & Drop */}
-              <ProfileImageDropzone
-                value={editing.image_url || ''}
-                onChange={(url) => setEditing({ ...editing, image_url: url })}
-              />
+              <div className="sm:col-span-2">
+                <ImageUploader
+                  label="Profile photo (drag & drop)"
+                  images={[editing.image_url || null]}
+                  onRemove={removePrimaryImage}
+                  onUpload={setPrimaryImage}
+                  hint="Set the main profile photo"
+                />
+              </div>
 
               <Field label="Languages (comma separated)">
                 <input value={editing.languages_str || ''} onChange={(e) => setEditing({ ...editing, languages_str: e.target.value })} placeholder="English, Swahili, French" className={inputCls} />
@@ -1013,10 +1014,16 @@ export function AdminPage() {
               </Field>
 
               {/* Gallery Photos Drag & Drop */}
-              <GalleryDropzone
-                galleryStr={editing.gallery_str || ''}
-                onChange={(newStr) => setEditing({ ...editing, gallery_str: newStr })}
-              />
+              <div className="sm:col-span-2">
+                <ImageUploader
+                  label="Gallery photos (drag & drop)"
+                  images={editing.gallery_arr || []}
+                  onRemove={removeGalleryImage}
+                  onUpload={addGalleryImage}
+                  multiple
+                  hint="Add up to 8 gallery images"
+                />
+              </div>
 
               <Field label="Bio & Description" full>
                 <textarea value={editing.bio || ''} onChange={(e) => setEditing({ ...editing, bio: e.target.value })} rows={3} placeholder="Write a brief intro bio..." className={`${inputCls} resize-none`} />
