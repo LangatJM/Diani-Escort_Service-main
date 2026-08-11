@@ -1,5 +1,5 @@
-const CACHE = 'diani-companion-v1';
-const ASSETS = ['/', '/index.html', '/manifest.webmanifest'];
+const CACHE = 'diani-companion-v2';
+const ASSETS = ['/', '/index.html', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -22,8 +22,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
 
+  // Network-first for navigation requests
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -37,18 +37,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      return (
-        cached ||
-        fetch(request)
-          .then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
-            return res;
+  // Stale-while-revalidate for local static assets
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const fetchPromise = fetch(request)
+          .then((networkRes) => {
+            if (networkRes && networkRes.status === 200) {
+              const copy = networkRes.clone();
+              caches.open(CACHE).then((c) => c.put(request, copy)).catch(() => {});
+            }
+            return networkRes;
           })
-          .catch(() => cached)
-      );
-    })
-  );
+          .catch(() => cached);
+        return cached || fetchPromise;
+      })
+    );
+  }
 });

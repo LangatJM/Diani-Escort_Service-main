@@ -1,4 +1,4 @@
-import { ArrowLeft, BadgeCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Languages, MapPin, MessageCircle, Phone, ShieldCheck, Star, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Copy, Languages, MapPin, MessageCircle, Phone, ShieldCheck, Star, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase, isSupabaseConfigured, type Companion, type NewBooking } from '@/lib/supabase';
 import { navigate } from '@/lib/router';
@@ -7,6 +7,7 @@ import { RatingStars } from '@/components/RatingStars';
 import { ReviewsSection } from '@/components/ReviewsSection';
 import { saveLocalBooking } from '@/lib/bookingsStore';
 import { findDemoCompanion, demoInsertBooking } from '@/lib/demoData';
+import { useToast } from '@/components/Toast';
 
 export function DetailPage({ id }: { id: string }) {
   const [companion, setCompanion] = useState<Companion | null>(null);
@@ -73,6 +74,15 @@ useEffect(() => {
   const gallery = ([companion.image_url, ...companion.gallery].filter(Boolean) as string[]).length > 0
     ? ([companion.image_url, ...companion.gallery].filter(Boolean) as string[])
     : ['https://images.pexels.com/photos/1476356/pexels-photo-1476356.jpeg?auto=compress&cs=tinysrgb&w=800'];
+
+  const { showToast } = useToast();
+
+  const copyContact = () => {
+    if (companion.phone) {
+      navigator.clipboard.writeText(companion.phone);
+      showToast(`Phone number ${companion.phone} copied to clipboard!`, 'info');
+    }
+  };
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-5 pb-20 pt-28 lg:px-8">
@@ -152,21 +162,28 @@ useEffect(() => {
           </div>
 
           {companion.phone && (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <a
                 href={`tel:${companion.phone.replace(/[^+\d]/g, '')}`}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-ocean-400/30 bg-ocean-500/10 px-4 py-3.5 text-sm font-bold text-ocean-200 transition hover:bg-ocean-500/20"
               >
-                <Phone size={16} /> Call {companion.name}
+                <Phone size={16} /> Call
               </a>
               <a
-                href={`https://wa.me/${(companion.phone || '').replace(/[^+\d]/g, '').replace(/^\+/, '')}?text=${encodeURIComponent(`Hello ${companion.name}! I found you on Diani Companion and would love to arrange a meet-up.`)}`}
+                href={`https://wa.me/${(companion.phone || '').replace(/[^+\d]/g, '').replace(/^\+/, '')}?text=${encodeURIComponent(`Hello ${companion.name}! I found your profile on Diani Companion and would love to arrange a session.`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-500"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500/90 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-emerald-500 shadow-lg shadow-emerald-500/10"
               >
-                <MessageCircle size={16} /> WhatsApp
+                <MessageCircle size={16} /> Direct WhatsApp
               </a>
+              <button
+                type="button"
+                onClick={copyContact}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3.5 text-sm font-bold text-white/80 transition hover:bg-white/10"
+              >
+                <Copy size={16} /> Copy Contact
+              </button>
             </div>
           )}
 
@@ -187,6 +204,7 @@ useEffect(() => {
 }
 
 function BookingModal({ companion, onClose }: { companion: Companion; onClose: () => void }) {
+  const { showToast } = useToast();
   const [form, setForm] = useState<NewBooking>({
     companion_id: companion.id,
     client_name: '',
@@ -253,6 +271,7 @@ setSubmitting(true);
       status: 'pending',
     });
     setSuccess(true);
+    showToast(`Booking request submitted for ${companion.name}!`, 'success');
 
     // Fire-and-forget notification to admin via edge function
     const fnBase = import.meta.env.VITE_SUPABASE_URL as string | undefined;
